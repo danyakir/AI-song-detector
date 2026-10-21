@@ -1,7 +1,7 @@
 import { config } from '../config.mjs';
 import { parseAudioUpload, parseJsonRequest } from '../lib/http.mjs';
 import { recognizeWithAudd } from '../services/auddService.mjs';
-import { scanAcrCloudPreview, scanWithAcrCloud } from '../services/acrCloudService.mjs';
+import { scanAcrCloudPreview, scanAcrCloudYoutubeUrl, scanWithAcrCloud } from '../services/acrCloudService.mjs';
 
 export const recognitionRoutes = new Map([
   ['/recognition/audd', async ({ request, signal }) => {
@@ -15,5 +15,9 @@ export const recognitionRoutes = new Map([
   ['/recognition/acrcloud-preview', async ({ request, signal }) => {
     const body = await parseJsonRequest(request, config.maxUploadBytes);
     return scanAcrCloudPreview(body?.previewUrl, signal);
+  }],
+  ['/recognition/acrcloud-youtube', async ({ request, signal }) => {
+    const body = await parseJsonRequest(request, config.maxUploadBytes);
+    return scanAcrCloudYoutubeUrl(body?.youtubeUrl, signal);
   }],
 ]);

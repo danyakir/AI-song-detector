@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioModule, setAudioModeAsync, useAudioStream, type AudioStream, type AudioStreamBuffer } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
-import { checkRecognitionServer, detectAiSong, detectAiSongFromPreview, identifySong, resultFromHumanMatch, type RecognitionAudio } from '../services/recognizeSong';
+import { checkRecognitionServer, detectAiSong, detectAiSongFromPreview, detectAiSongFromYoutube, identifySong, resultFromHumanMatch, type RecognitionAudio } from '../services/recognizeSong';
 import type { RecognitionPhase, RecognitionResult } from '../recognition.types';
 
 const MAX_RECORDING_SECONDS = 30;
@@ -178,12 +178,14 @@ export function useSongRecognition() {
   }, [stopCapture]);
 
   const finishMatchedSong = useCallback(async (match: NonNullable<AuddMatch>) => {
-    if (!match.previewUrl) {
+    if (!match.previewUrl && !match.youtubeUrl) {
       await finishWithResult({ classification: 'unknown', title: match.title, artist: match.artist });
       return;
     }
 
-    const verdict = await detectAiSongFromPreview(match.previewUrl, requestAbortController.current?.signal);
+    const verdict = match.previewUrl
+      ? await detectAiSongFromPreview(match.previewUrl, requestAbortController.current?.signal)
+      : await detectAiSongFromYoutube(match.youtubeUrl!, requestAbortController.current?.signal);
     if (verdict.isAi === true) {
       await finishWithResult({ classification: 'ai', title: match.title, artist: match.artist, generator: verdict.generator, score: verdict.score });
     } else if (verdict.isAi === false) {

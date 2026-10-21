@@ -28,31 +28,45 @@ export async function recognizeWithAudd(audio, signal) {
   if (appleMusic?.url) console.log(`[AudD] Apple Music URL: ${appleMusic.url}`);
   if (previewUrl) console.log(`[AudD] Preview URL: ${previewUrl}`);
 
-  const directYoutubeUrl = match.youtube?.url ?? match.youtube_url ?? match.youtubeUrl ?? null;
+  const directYoutubeUrl = typeof match.youtube === 'string'
+    ? match.youtube
+    : match.youtube?.url ?? match.youtube_url ?? match.youtubeUrl ?? null;
+  let youtubeUrl = null;
   if (previewUrl) {
     console.log('[AudD] Skipping YouTube lookup because an Apple Music preview is available.');
   } else if (directYoutubeUrl) {
-    console.log(`[AudD] YouTube URL included in match: ${directYoutubeUrl}`);
+    youtubeUrl = normalizeYouTubeUrl(directYoutubeUrl);
+    console.log(`[AudD] YouTube URL ${youtubeUrl ? 'found' : 'not usable'} in match${youtubeUrl ? `: ${youtubeUrl}` : '.'}`);
   } else if (match.song_link) {
-    void logAudDYoutubeLink(match.song_link, signal).catch((error) => {
+    youtubeUrl = await resolveAudDYoutubeLink(match.song_link, signal).catch((error) => {
       console.log(`[AudD] YouTube link lookup failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      return null;
     });
   } else {
     console.log('[AudD] YouTube link: no song_link was included to resolve.');
   }
 
-  return { match: { title, artist, previewUrl } };
+  return { match: { title, artist, previewUrl, youtubeUrl } };
 }
 
-async function logAudDYoutubeLink(songLink, signal) {
+function normalizeYouTubeUrl(value) {
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  const hostname = url.hostname.toLowerCase();
+  const isYoutube = hostname === 'youtu.be' || hostname === 'youtube.com' || hostname.endsWith('.youtube.com');
+  if (url.protocol !== 'https:' || !isYoutube || url.username || url.password || url.port) return null;
+  return url.href;
+}
+
+async function resolveAudDYoutubeLink(songLink, signal) {
   let link;
   try { link = new URL(songLink); } catch {
     console.log('[AudD] YouTube link: AudD song_link is not a valid URL.');
-    return;
+    return null;
   }
   if (link.protocol !== 'https:' || link.hostname !== 'lis.tn') {
     console.log(`[AudD] YouTube link: song_link host is ${link.hostname}, not the AudD redirect host.`);
-    return;
+    return null;
   }
 
   const lookupUrl = `${link.href}${link.search ? '&' : '?'}youtube`;
@@ -62,12 +76,11 @@ async function logAudDYoutubeLink(songLink, signal) {
   const location = response.headers.get('location');
   if (!location) {
     console.log(`[AudD] YouTube link: no redirect destination returned (HTTP ${response.status}).`);
-    return;
+    return null;
   }
 
   const destination = new URL(location, lookupUrl);
-  const isYoutube = destination.hostname === 'youtu.be'
-    || destination.hostname === 'youtube.com'
-    || destination.hostname.endsWith('.youtube.com');
-  console.log(`[AudD] YouTube link ${isYoutube ? 'found' : 'not resolved'}: ${destination.href}`);
+  const youtubeUrl = normalizeYouTubeUrl(destination.href);
+  console.log(`[AudD] YouTube link ${youtubeUrl ? 'found' : 'not resolved'}${youtubeUrl ? `: ${youtubeUrl}` : ` (redirected to ${destination.hostname})`}`);
+  return youtubeUrl;
 }

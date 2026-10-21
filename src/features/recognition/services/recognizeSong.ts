@@ -111,7 +111,7 @@ async function postAudio<T>(path: string, audio: RecognitionAudio, signal?: Abor
   }
 }
 
-export type AuddResponse = { match: { title: string; artist: string; previewUrl: string | null } | null };
+export type AuddResponse = { match: { title: string; artist: string; previewUrl: string | null; youtubeUrl: string | null } | null };
 export type AcrCloudResponse = { isAi: boolean | null; generator: string | null; score: number | null };
 
 export async function identifySong(audio: RecognitionAudio, signal?: AbortSignal): Promise<AuddResponse> {
@@ -127,6 +127,18 @@ export async function detectAiSongFromPreview(previewUrl: string, signal?: Abort
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ previewUrl }),
+    signal,
+  }, ACRCLOUD_TIMEOUT_MS);
+  const data = await response.json() as AcrCloudResponse & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? `Recognition service failed (${response.status}).`);
+  return data;
+}
+
+export async function detectAiSongFromYoutube(youtubeUrl: string, signal?: AbortSignal): Promise<AcrCloudResponse> {
+  const response = await fetchWithTimeout(`${apiBaseUrl}/recognition/acrcloud-youtube`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ youtubeUrl }),
     signal,
   }, ACRCLOUD_TIMEOUT_MS);
   const data = await response.json() as AcrCloudResponse & { error?: string };

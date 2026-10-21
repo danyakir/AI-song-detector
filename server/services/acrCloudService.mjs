@@ -145,31 +145,7 @@ function normalizeAiResult(file) {
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function saveDebugRecording(audio, { filename, source }) {
-  if (!config.saveDebugRecordings) return;
-  await mkdir(config.debugRecordingsDirectory, { recursive: true });
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const extension = filename.split('.').at(-1)?.replace(/[^a-z0-9]/gi, '') || 'audio';
-  const path = join(config.debugRecordingsDirectory, `ai-song-detector-${source}-${timestamp}.${extension}`);
-  await writeFile(path, Buffer.from(await audio.arrayBuffer()));
-  console.log(`[ACRCloud] Saved outgoing clip for debugging: ${path}`);
-}
-
-export async function scanWithAcrCloud(audio, { filename = 'recording.wav', source = 'capture', signal } = {}) {
-  await saveDebugRecording(audio, { filename, source });
-  const container = await ensureContainer();
-  if (signal?.aborted) throw new DOMException('Recognition was cancelled.', 'AbortError');
-  const baseUrl = `https://api-${container.region}.acrcloud.com/api/fs-containers/${encodeURIComponent(container.id)}`;
-
-  const upload = new FormData();
-  upload.append('file', audio, basename(filename));
-  upload.append('data_type', 'audio');
-  console.log(`[ACRCloud] Uploading ${source} clip (${audio.size} bytes, ${audio.type || 'unknown type'}, ${filename}).`);
-  const uploaded = await acrRequest(`${baseUrl}/files`, { method: 'POST', body: upload, signal });
-  const file = uploaded?.data ?? uploaded;
-  const fileId = file?.id ?? file?.file_id;
-  if (!fileId) throw new Error('ACRCloud did not return an uploaded file ID.');
-
+async function pollAcrCloudFile(fileId, baseUrl, signal) {
   try {
     for (let attempt = 0; attempt < 45; attempt += 1) {
       const detail = await acrRequest(`${baseUrl}/files/${encodeURIComponent(fileId)}?with_result=1`, { signal });
@@ -193,6 +169,61 @@ export async function scanWithAcrCloud(audio, { filename = 'recording.wav', sour
       // Keep the recognition result if remote cleanup is unavailable.
     }
   }
+}
+
+function getUploadedFileId(body) {
+  const file = body?.data ?? body;
+  const fileId = file?.id ?? file?.file_id;
+  if (!fileId) throw new Error('ACRCloud did not return an uploaded file ID.');
+  return String(fileId);
+}
+
+async function saveDebugRecording(audio, { filename, source }) {
+  if (!config.saveDebugRecordings) return;
+  await mkdir(config.debugRecordingsDirectory, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const extension = filename.split('.').at(-1)?.replace(/[^a-z0-9]/gi, '') || 'audio';
+  const path = join(config.debugRecordingsDirectory, `ai-song-detector-${source}-${timestamp}.${extension}`);
+  await writeFile(path, Buffer.from(await audio.arrayBuffer()));
+  console.log(`[ACRCloud] Saved outgoing clip for debugging: ${path}`);
+}
+
+export async function scanWithAcrCloud(audio, { filename = 'recording.wav', source = 'capture', signal } = {}) {
+  await saveDebugRecording(audio, { filename, source });
+  const container = await ensureContainer();
+  if (signal?.aborted) throw new DOMException('Recognition was cancelled.', 'AbortError');
+  const baseUrl = `https://api-${container.region}.acrcloud.com/api/fs-containers/${encodeURIComponent(container.id)}`;
+
+  const upload = new FormData();
+  upload.append('file', audio, basename(filename));
+  upload.append('data_type', 'audio');
+  console.log(`[ACRCloud] Uploading ${source} clip (${audio.size} bytes, ${audio.type || 'unknown type'}, ${filename}).`);
+  const uploaded = await acrRequest(`${baseUrl}/files`, { method: 'POST', body: upload, signal });
+  return pollAcrCloudFile(getUploadedFileId(uploaded), baseUrl, signal);
+}
+
+export async function scanAcrCloudYoutubeUrl(value, signal) {
+  let url;
+  try { url = new URL(value); } catch {
+    throw httpError('AudD returned an invalid YouTube URL.', 400);
+  }
+  const hostname = url.hostname.toLowerCase();
+  const isYoutube = hostname === 'youtu.be' || hostname === 'youtube.com' || hostname.endsWith('.youtube.com');
+  if (url.protocol !== 'https:' || !isYoutube || url.port || url.username || url.password) {
+    throw httpError('The YouTube URL uses an unsupported host.', 400);
+  }
+
+  const container = await ensureContainer();
+  if (signal?.aborted) throw new DOMException('Recognition was cancelled.', 'AbortError');
+  const baseUrl = `https://api-${container.region}.acrcloud.com/api/fs-containers/${encodeURIComponent(container.id)}`;
+  console.log(`[ACRCloud] Submitting AudD YouTube URL for platform scanning: ${url.href}`);
+  const uploaded = await acrRequest(`${baseUrl}/files`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ data_type: 'platforms', url: url.href }),
+    signal,
+  });
+  return pollAcrCloudFile(getUploadedFileId(uploaded), baseUrl, signal);
 }
 
 export async function scanAcrCloudPreview(previewUrl, signal) {

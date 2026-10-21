@@ -43,7 +43,7 @@ export function RecognitionResultModal({ visible, result, error, onClose }: Prop
       : isHuman
         ? `${result.title}\n${result.artist}`
         : result.title
-          ? `${result.title}\n${result.artist ?? ''}\nWe identified the song, but couldn’t verify whether it was AI-made because no usable clean preview was available.`
+          ? `${result.title}\n${result.artist ?? ''}\nWe identified the song, but ACRCloud couldn’t return a usable AI verdict.`
           : 'We couldn’t identify this track or determine how it was made.')
     : setupError ?? error;
 

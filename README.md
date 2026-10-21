@@ -6,7 +6,7 @@ An Expo and React Native app that listens to nearby music, checks AudD for a son
 
 - Capture one uninterrupted, mono PCM stream for up to 30 seconds.
 - Send the latest 12-second audio window to AudD at 12, 15, 20, 25, and 30 seconds. The final request is followed by an ACRCloud scan of the full captured recording only if none of the AudD requests found a match.
-- When AudD finds a song, scan its Apple Music preview with ACRCloud when a preview URL is available. Show the catalog track as human-made only when ACRCloud says `human`; show an AI verdict and likely source when ACRCloud says `ai_generated`. If there is no usable preview or verdict, show the match without claiming a classification.
+- When AudD finds a song, scan its Apple Music preview with ACRCloud when a preview URL is available. If no preview exists, resolve AudD's song link to a YouTube URL and submit that platform URL directly to ACRCloud File Scanning. Show the catalog track as human-made only when ACRCloud says `human`; show an AI verdict and likely source when ACRCloud says `ai_generated`. If neither source provides a usable verdict, show the match without claiming a classification.
 - If AudD finds no song by 30 seconds, scan the full captured recording with ACRCloud. If ACRCloud returns `prediction: "ai_generated"`, show its likely source when available; otherwise show “Couldn’t identify the song.”
 - Captured audio is converted to WAV in memory. Debug copies are off by default. To save ACRCloud uploads locally while debugging, set `SAVE_DEBUG_RECORDINGS=1`; set `DEBUG_RECORDINGS_DIR` to choose the directory. Hosted filesystems may be temporary, so do not rely on this for persistent storage.
 - Uploaded ACRCloud files are deleted from the container after the scan result is read.
@@ -48,7 +48,7 @@ Do not set provider credentials as `EXPO_PUBLIC_*` variables. Expo embeds public
 - `src/features/recognition/recognition.types.ts` defines recognition results and UI phases.
 - `server/index.mjs` is the process entry point; `server/app.mjs` wires HTTP handling, health checks, routes, and the production web build.
 - `server/routes/recognition.mjs` maps recognition endpoints to provider services.
-- `server/services/auddService.mjs` handles AudD recognition and match normalization; `server/services/acrCloudService.mjs` handles ACRCloud uploads, polling, previews, and verdict normalization.
+- `server/services/auddService.mjs` handles AudD recognition and match normalization; `server/services/acrCloudService.mjs` handles ACRCloud audio and platform URL uploads, polling, previews, and verdict normalization.
 - `server/services/acrCloudResourceStore.mjs` stores discovered ACRCloud resource IDs for local development.
 - `server/lib/http.mjs` and `server/lib/errors.mjs` contain shared request parsing, response, and error helpers; `server/config.mjs` centralizes server settings.
 - `src/theme.ts` contains shared colors and font names.
