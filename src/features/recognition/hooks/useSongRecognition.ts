@@ -102,6 +102,7 @@ export function useSongRecognition() {
   const onBufferRef = useRef<(buffer: AudioStreamBuffer) => void>(() => undefined);
   const finishStarted = useRef(false);
   const settled = useRef(false);
+  const matchedSong = useRef<AuddMatch>(null);
   const startMatchedSongRef = useRef<(match: NonNullable<AuddMatch>) => void>(() => undefined);
   const finishRecognitionRef = useRef<(sampleRate: number) => void>(() => undefined);
 
@@ -197,12 +198,19 @@ export function useSongRecognition() {
 
   const startMatchedSong = useCallback((match: NonNullable<AuddMatch>) => {
     if (finishStarted.current || settled.current) return;
+    if (!match.previewUrl && !match.youtubeUrl) {
+      matchedSong.current ??= match;
+      console.log('[Detector] AudD found a song without a preview or YouTube URL; continuing capture for an ACRCloud audio scan.');
+      return;
+    }
+
+    matchedSong.current = match;
     finishStarted.current = true;
     stopCapture();
     void finishMatchedSong(match).catch((recognitionError) => {
       finishWithError(recognitionError, 'Song recognition failed.');
     });
-  }, [finishMatchedSong, finishWithError, stopCapture]);
+  }, [finishMatchedSong, finishWithError]);
   startMatchedSongRef.current = startMatchedSong;
 
   const onBuffer = useCallback((buffer: AudioStreamBuffer) => {
@@ -217,7 +225,7 @@ export function useSongRecognition() {
     setAudioLevel(Math.min(1, Math.sqrt(power / samples.length) * 3.5));
 
     const seconds = capturedSamples.current / buffer.sampleRate;
-    while (nextAuddCheck.current < AUDD_CHECK_SECONDS.length && seconds >= AUDD_CHECK_SECONDS[nextAuddCheck.current]) {
+    while (!matchedSong.current && nextAuddCheck.current < AUDD_CHECK_SECONDS.length && seconds >= AUDD_CHECK_SECONDS[nextAuddCheck.current]) {
       nextAuddCheck.current += 1;
       const audio = flatten(chunks.current, AUDD_WINDOW_SECONDS * buffer.sampleRate);
       const request = toWav(audio.samples, audio.sampleRate)
@@ -260,9 +268,24 @@ export function useSongRecognition() {
         auddFinal,
       ]);
       if (settled.current) return;
-      const match = auddResponses.find((response): response is NonNullable<AuddMatch> => response !== null);
+      const foundMatches = auddResponses.filter((response): response is NonNullable<AuddMatch> => response !== null);
+      const match = foundMatches.find((response) => response.previewUrl || response.youtubeUrl)
+        ?? matchedSong.current
+        ?? foundMatches[0];
       if (match) {
-        await finishMatchedSong(match);
+        if (match.previewUrl || match.youtubeUrl) {
+          await finishMatchedSong(match);
+          return;
+        }
+
+        console.log('[Detector] Scanning the captured recording with ACRCloud because AudD found no reference preview or YouTube URL.');
+        const aiVerdict = await detectAiSong(await toWav(fullClip.samples, fullClip.sampleRate), requestAbortController.current?.signal);
+        if (settled.current) return;
+        await finishWithResult(aiVerdict.isAi === true
+          ? { classification: 'ai', title: match.title, artist: match.artist, generator: aiVerdict.generator, score: aiVerdict.score }
+          : aiVerdict.isAi === false
+            ? resultFromHumanMatch(match)
+            : { classification: 'unknown', title: match.title, artist: match.artist });
         return;
       }
 
@@ -275,7 +298,7 @@ export function useSongRecognition() {
     } catch (recognitionError) {
       finishWithError(recognitionError, 'Song recognition failed.');
     }
-  }, [finishMatchedSong, finishWithError, finishWithResult, stopCapture]);
+  }, [finishMatchedSong, finishWithError, finishWithResult]);
   finishRecognitionRef.current = (sampleRate) => { void finishRecognition(sampleRate); };
 
   useEffect(() => {
@@ -305,6 +328,7 @@ export function useSongRecognition() {
     chunks.current = [];
     capturedSamples.current = 0;
     nextAuddCheck.current = 0;
+    matchedSong.current = null;
     pendingAudd.current.clear();
     finishStarted.current = false;
     settled.current = false;
