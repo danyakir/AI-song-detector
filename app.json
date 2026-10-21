@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "AI Song Detector",
+    "slug": "ai-song-detector",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#cdb6ff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "AI Song Detector listens to nearby music so it can analyze whether it was made with AI."
+      }
+    },
+    "android": {
+      "permissions": [
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#cdb6ff"
+      },
+      "package": "com.anonymous.aisongdetector"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-audio",
+      "expo-status-bar"
+    ]
+  }
+}
